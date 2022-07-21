@@ -170,7 +170,7 @@ class TestPrims(TestCase):
         def func(a):
             return torch.sigmoid(a)
 
-        with TorchRefsMode.push():
+        with TorchRefsMode():
             gm = make_fx(func)(a)
 
         # First run to create the cache
