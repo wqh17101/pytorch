@@ -331,6 +331,10 @@ c10::SymIntArrayRef FunctionalTensorWrapper::sym_sizes_custom() const {
 namespace functionalization {
 namespace impl {
 
+c10::optional<Tensor> to_optional_tensor(OptionalTensorRef ref) {
+  return ref.has_value() ? c10::optional<Tensor>(*ref) : c10::nullopt;
+}
+
 Tensor to_functional_tensor(const Tensor& tensor) {
   // Note [Wrapped Numbers <> Functionalization]
   if (tensor.unsafeGetTensorImpl()->is_wrapped_number()) {
@@ -345,11 +349,11 @@ c10::optional<Tensor> to_functional_tensor(const c10::optional<Tensor>& tensor) 
   }
   return c10::nullopt;
 }
-c10::List<c10::optional<Tensor>> to_functional_tensor(const c10::List<c10::optional<Tensor>>& t_list) {
+c10::List<c10::optional<Tensor>> to_functional_tensor(IOptTensorListRef t_list) {
   c10::List<c10::optional<Tensor>> outputs;
   outputs.reserve(t_list.size());
-  for (const auto i : c10::irange(t_list.size())) {
-    outputs.push_back(to_functional_tensor(t_list[i]));
+  for (const auto& tensor : t_list) {
+    outputs.push_back(to_functional_tensor(to_optional_tensor(tensor)));
   }
   return outputs;
 }
@@ -397,11 +401,14 @@ std::vector<Tensor> from_functional_tensor(ITensorListRef t_list) {
   }
   return outputs;
 }
-c10::List<c10::optional<Tensor>> from_functional_tensor(const c10::List<c10::optional<Tensor>>& t_list) {
+c10::List<c10::optional<Tensor>> from_functional_tensor(IOptTensorListRef t_list) {
   c10::List<c10::optional<Tensor>> outputs;
   outputs.reserve(t_list.size());
-  for (const auto i : c10::irange(t_list.size())) {
-    outputs.push_back(from_functional_tensor(t_list[i], /*assert_functional=*/false));
+  for (const auto& opt_tensor : t_list) {
+    auto opt = (opt_tensor.has_value())
+        ? c10::optional<Tensor>(from_functional_tensor(*opt_tensor, /*assert_functional=*/false))
+        : c10::nullopt;
+    outputs.push_back(opt);
   }
   return outputs;
 }
@@ -433,9 +440,11 @@ void sync(ITensorListRef t_list) {
     sync(t);
   }
 }
-void sync(const c10::List<c10::optional<Tensor>> t_list) {
-  for (const auto i : c10::irange(t_list.size())) {
-    sync(t_list[i]);
+void sync(IOptTensorListRef t_list) {
+  for (const auto& tensor : t_list) {
+    if (tensor.has_value()) {
+      sync(*tensor);
+    }
   }
 }
 
@@ -444,7 +453,7 @@ void replace_(const Tensor& functional_tensor, const Tensor& other) {
   unsafeGetFunctionalWrapper(functional_tensor)->replace_(other);
 }
 
-void replace_(const ITensorListRef functional_tensor, ITensorListRef other) {
+void replace_(ITensorListRef functional_tensor, ITensorListRef other) {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(functional_tensor.size() == other.size());
   auto functional_tensor_it = functional_tensor.begin();
   auto other_it = other.begin();
@@ -477,32 +486,17 @@ bool isFunctionalTensor(const c10::optional<Tensor>& t) {
   }
 }
 
-bool isFunctionalTensor(const c10::List<c10::optional<Tensor>>& t_list) {
-  if (t_list.size() == 0) return false;
-  auto functional_count = 0;
-  auto nonfunctional_count = 0;
-  for (const auto i : c10::irange(t_list.size())) {
-    if (!t_list[i].has_value() || !t_list[i]->defined()) continue;
-    if (isFunctionalTensor(t_list[i])) {
-      ++functional_count;
-    } else {
-      ++nonfunctional_count;
-    }
-  }
-  TORCH_INTERNAL_ASSERT(
-       functional_count == 0 || nonfunctional_count == 0,
-      "Functionalization encountered a list of tensors where some are functional",
-      "and some are not, which is not currently unsupported.");
-  return functional_count > 0;
+bool isFunctionalTensor(OptionalTensorRef t) {
+  return isFunctionalTensor(to_optional_tensor(t));
 }
 
-template <typename T>
-bool isFunctionalTensorIListRef(c10::IListRef<T> list) {
+template <typename T, typename F>
+bool isFunctionalTensorIListRef(c10::IListRef<T> list, F&& should_skip) {
   if (list.size() == 0) return false;
   auto functional_count = 0;
   auto nonfunctional_count = 0;
   for (const auto& tensor : list) {
-    if (!tensor.defined()) continue;
+    if (should_skip(tensor)) continue;
     if (isFunctionalTensor(tensor)) {
       ++functional_count;
     } else {
@@ -517,7 +511,11 @@ bool isFunctionalTensorIListRef(c10::IListRef<T> list) {
 }
 
 bool isFunctionalTensor(ITensorListRef list) {
-  return isFunctionalTensorIListRef(list);
+  return isFunctionalTensorIListRef(list, [](const auto& t) { return !t.defined(); });
+}
+
+bool isFunctionalTensor(IOptTensorListRef list) {
+  return isFunctionalTensorIListRef(list, [](const auto& t) { return !t.has_value(); });
 }
 
 Tensor create_functional_tensor_with_view_meta(const at::Tensor& view_to_wrap, const at::Tensor& base, functionalization::ViewMeta meta, int64_t out_idx) {

@@ -20,6 +20,7 @@ TENSOR_LIST_LIKE_CTYPES = [
     "at::TensorList",
     "const c10::List<c10::optional<at::Tensor>> &",
     "const at::ITensorListRef &",
+    "const at::IOptTensorListRef &",
 ]
 
 # An ArgName is just the str name of the argument in schema;
@@ -426,10 +427,10 @@ class CppSignature:
     cpp_no_default_args: Set[str]
 
     # [Note: Structured Type Override]
-    # We override Tensor[] for structured kernels in both the dispatcher
+    # We override both Tensor[] and Tensor?[] for structured kernels in both the dispatcher
     # and in the C++ API.
-    # This is a step towards enabling the new API: ITensorListRef.
-    # See [Note: ITensorListRef]
+    # This is a step towards enabling the new API: ITensorListRef and IOptTensorListRef.
+    # See [Note: ITensorListRef] and [Note: IOptTensorListRef]
 
     # Should the arguments be overriden with structured types?
     structured_type_override: bool

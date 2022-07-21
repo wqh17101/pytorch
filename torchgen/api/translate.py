@@ -1,6 +1,5 @@
 from typing import Dict, Sequence, List, NoReturn, Union
 from torchgen.api.types import (
-    ListCType,
     BaseCType,
     Binding,
     ConstRefCType,
@@ -19,7 +18,6 @@ from torchgen.api.types import (
     deviceT,
     layoutT,
     optionalTensorRefT,
-    iOptTensorListRefT,
     scalarT,
     optionalScalarRefT,
     VectorCType,
@@ -180,12 +178,6 @@ def translate(
             ctx[
                 NamedCType(t.name, BaseCType(opmath_t))
             ] = f"static_cast<opmath_t>({b.expr})"
-
-        # [Note: IOptTensorListRef]
-        if t.type == ConstRefCType(ListCType(OptionalCType(BaseCType(tensorT)))):
-            ctx[
-                NamedCType(t.name, BaseCType(iOptTensorListRefT))
-            ] = f"at::IOptTensorListRef({b.expr})"
 
     # Add implicit bindings if the generated code is inside a Tensor method
     if method:

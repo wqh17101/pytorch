@@ -15,7 +15,6 @@ from torchgen.api.types import (
     NamedCType,
     CType,
     MutRefCType,
-    ListCType,
     OptionalCType,
     tensorT,
     scalarT,
@@ -58,10 +57,6 @@ def argumenttype_type(
             return NamedCType(binds, MutRefCType(tensor_type))
         else:
             return NamedCType(binds, ConstRefCType(tensor_type))
-    elif str(t) == "Tensor?[]":
-        return NamedCType(
-            binds, ConstRefCType(ListCType(OptionalCType(BaseCType(tensorT))))
-        )
     elif str(t) == "Scalar":
         return NamedCType(binds, ConstRefCType(BaseCType(scalarT)))
     elif str(t) == "Scalar?":
