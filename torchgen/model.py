@@ -833,6 +833,10 @@ class NativeFunction:
     def root_name(self) -> str:
         return self.func.name.name.base
 
+    @property
+    def part_of_structured_group(self) -> bool:
+        return self.structured or self.structured_delegate is not None
+
 
 SchemaKind = Enum("SchemaKind", ("functional", "inplace", "out", "mutable", "scratch"))
 

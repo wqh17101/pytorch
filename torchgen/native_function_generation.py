@@ -426,8 +426,13 @@ def gen_composite_functional_kernel(g: NativeFunctionsGroup) -> Optional[str]:
         # See Note: [Mutable Ops Not Using Functionalization]
         raise AssertionError(str(g.functional.func))
 
-    sig = DispatcherSignature(g.functional.func)
-    target_sig = DispatcherSignature(target_f.func)
+    sig = DispatcherSignature(
+        g.functional.func,
+        structured_type_override=g.functional.part_of_structured_group,
+    )
+    target_sig = DispatcherSignature(
+        target_f.func, structured_type_override=target_f.part_of_structured_group
+    )
 
     context: List[Union[Binding, Expr]] = []
     clone_mutable_inputs = []
@@ -446,13 +451,22 @@ def gen_composite_functional_kernel(g: NativeFunctionsGroup) -> Optional[str]:
             context.append(
                 Expr(
                     expr=f"{a_curr.name}_clone",
-                    type=dispatcher.argument_type(a_curr, binds=a_curr.name),
+                    type=dispatcher.argument_type(
+                        a_curr,
+                        binds=a_curr.name,
+                        structured_type_override=g.functional.part_of_structured_group,
+                    ),
                 )
             )
             # Invariant: mutable arguments on the inner mutable op are always returns on the functional op.
             cloned_return_names.append(f"{a_curr.name}_clone")
         else:
-            context.append(dispatcher.argument(a_curr))
+            context.append(
+                dispatcher.argument(
+                    a_curr,
+                    structured_type_override=g.functional.part_of_structured_group,
+                )
+            )
     exprs = ", ".join([e.expr for e in translate(context, target_sig.arguments())])
 
     out_name = "output"
@@ -484,8 +498,13 @@ def gen_composite_out_kernel(g: NativeFunctionsGroup) -> Optional[str]:
     # worry about cycles, because the generated functional kernels are always implemented
     # in terms of non-generated kernels (see gen_composite_functional_kernel).
 
-    sig = DispatcherSignature(g.out.func)
-    target_sig = DispatcherSignature(g.functional.func)
+    sig = DispatcherSignature(
+        g.out.func, structured_type_override=g.out.part_of_structured_group
+    )
+    target_sig = DispatcherSignature(
+        g.functional.func,
+        structured_type_override=g.functional.part_of_structured_group,
+    )
 
     exprs = ", ".join(
         [e.expr for e in translate(sig.arguments(), target_sig.arguments())]
